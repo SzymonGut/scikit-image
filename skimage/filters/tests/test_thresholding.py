@@ -27,6 +27,7 @@ from skimage.filters.thresholding import (_cross_entropy, _mean_std,
                                           threshold_sauvola,
                                           threshold_triangle,
                                           threshold_yen,
+                                          threshold_moments,
                                           try_all_threshold)
 
 
@@ -256,6 +257,17 @@ class TestSimpleImage():
         thres = threshold_sauvola(self.image, window_size=(3, 5), k=0.2, r=128)
         out = self.image > thres
         assert_array_equal(ref, out)
+
+    def test_moments(self):
+        assert threshold_moments(self.image) == 2
+
+    def test_moments_negative_int(self):
+        image = self.image - 2
+        assert threshold_moments(image) == 0
+
+    def test_moments_float_image(self):
+        image = np.float64(self.image)
+        assert 2 <= threshold_moments(image) < 3
 
 
 def test_otsu_camera_image():
