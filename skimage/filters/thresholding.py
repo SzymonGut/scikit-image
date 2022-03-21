@@ -304,8 +304,8 @@ def _validate_image_histogram(image, hist, nbins=None, normalize=False):
             counts, bin_centers = counts[start:end], bin_centers[start:end]
     else:
         counts, bin_centers = histogram(
-                image.ravel(), nbins, source_range='image', normalize=normalize
-            )
+            image.ravel(), nbins, source_range='image', normalize=normalize
+        )
     return counts.astype(float), bin_centers
 
 
@@ -1011,7 +1011,6 @@ def _mean_std(image, w):
     padded *= padded
     integral_sq = integral_image(padded, dtype=np.float64)
 
-
     # Create lists of non-zero kernel indices and values
     kernel_indices = list(itertools.product(*tuple([(0, _w) for _w in w])))
     kernel_values = [(-1) ** (image.ndim % 2 != np.sum(indices) % 2)
@@ -1304,3 +1303,75 @@ def threshold_multiotsu(image=None, classes=3, nbins=256, *, hist=None):
     thresh = bin_centers[thresh_idx]
 
     return thresh
+
+
+def threshold_moments(image=None, nbins=256, *, hist=None):
+    """Return threshold value based on Tsai's moments preserving method.
+
+    Either image or hist must be provided. If hist is provided, the actual
+    histogram of the image is ignored.
+
+    Parameters
+    ----------
+    image : (N, M[, ..., P]) ndarray, optional
+        Grayscale input image.
+    nbins : int, optional
+        Number of bins used to calculate histogram. This value is ignored for
+        integer arrays.
+    hist : array, or 2-tuple of arrays, optional
+        Histogram from which to determine the threshold, and optionally a
+        corresponding array of bin center intensities. If no hist provided,
+        this function will compute it from the image.
+
+    Returns
+    -------
+    threshold : float
+        Upper threshold value. All pixels with an intensity higher than
+        this value are assumed to be foreground.
+    References
+    ----------
+    .. [1] Tsai, W.-H. (1985). "Moment-preserving thresolding: A new approach." 
+           Computer Vision, Graphics, and Image Processing, 29(3), 377–393. 
+           :DOI:`10.1016/0734-189x(85)90133-1`
+
+    Examples
+    --------
+    >>> from skimage.data import camera
+    >>> image = camera()
+    >>> thresh = threshold_tsai(image)
+    >>> binary = image <= thresh
+    Notes
+    -----
+    The input image must be grayscale.
+    """
+
+    counts, bin_centers = _validate_image_histogram(image, hist, nbins)
+
+    n = np.multiply(*image.shape)
+    pj = counts/n
+
+    m0 = 1.0
+    m1 = m2 = m3 = 0.0
+    for i, c in enumerate(pj):
+        m1 += i * c
+        m2 += i * i * c
+        m3 += i * i * i * c
+
+    cd = m0 * m2 - m1 * m1
+    c0 = (-m2 * m2 + m1 * m3) / cd
+    c1 = (m0 * -m3 + m2 * m1) / cd
+    z0 = 0.5 * (-c1 - np.sqrt(c1 * c1 - 4.0 * c0))
+    z1 = 0.5 * (-c1 + np.sqrt(c1 * c1 - 4.0 * c0))
+
+    p0 = (z1 - m1) / (z1 - z0)
+
+    dt = 1
+    cs = 0
+    for i, j in zip(bin_centers, pj):
+        cs += j
+        d = np.abs(cs - p0)
+        if d <= dt:
+            dt = d
+            t = i
+
+    return t
